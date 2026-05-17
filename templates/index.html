@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>다익스트라 최단경로 시뮬레이터</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Noto+Sans+KR:wght@300;400;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<style>
+:root {
+  --bg:       #f0f2f5;
+  --surface:  #ffffff;
+  --surface2: #f7f8fa;
+  --border:   #dde1ea;
+  --accent:   #1a6ef5;
+  --accent2:  #e8420a;
+  --confirm:  #0a9e5c;
+  --update:   #d4860a;
+  --text:     #1a1d24;
+  --text-dim: #8a90a0;
+  --shadow:   0 2px 8px rgba(0,0,0,0.10);
+  --font-mono: 'JetBrains Mono', monospace;
+  --font-sans: 'Noto Sans KR', sans-serif;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  background:var(--bg); color:var(--text);
+  font-family:var(--font-sans);
+  height:100vh; overflow:hidden;
+  display:flex; flex-direction:column;
+}
+
+/* ── 헤더 ── */
+header {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:10px 24px;
+  border-bottom:1px solid var(--border);
+  background:var(--surface);
+  flex-shrink:0;
+  box-shadow:var(--shadow); z-index:10;
+}
+.header-title { display:flex; align-items:baseline; gap:12px; }
+.header-title h1 {
+  font-family:var(--font-mono); font-size:15px; font-weight:700;
+  color:var(--accent); letter-spacing:0.06em; text-transform:uppercase;
+}
+.header-title span { font-size:12px; color:var(--text-dim); font-family:var(--font-mono); }
+.header-badges { display:flex; gap:8px; align-items:center; }
+.badge { font-family:var(--font-mono); font-size:10px; padding:4px 10px; border-radius:4px; font-weight:700; }
+.badge-start { background:#d4f5e5; color:#0a7a44; border:1px solid #a8e6c8; }
+.badge-end   { background:#fde8df; color:#c43a08; border:1px solid #f5bfaa; }
+
+/* ── 메인 ── */
+.main { display:flex; flex:1; overflow:hidden; }
+
+/* ── 좌측 패널 ── */
+.panel-left {
+  width:240px; flex-shrink:0;
+  background:var(--surface); border-right:1px solid var(--border);
+  display:flex; flex-direction:column; overflow:hidden;
+  box-shadow:2px 0 6px rgba(0,0,0,0.05);
+}
+.panel-section { padding:14px 16px; border-bottom:1px solid var(--border); }
+.panel-section-title {
+  font-family:var(--font-mono); font-size:10px;
+  text-transform:uppercase; letter-spacing:0.12em;
+  color:var(--text-dim); margin-bottom:10px;
+}
+.view-tabs {
+  display:flex; border:1px solid var(--border);
+  border-radius:6px; overflow:hidden; background:var(--surface2);
+}
+.view-tab {
+  flex:1; padding:7px; text-align:center;
+  font-family:var(--font-mono); font-size:11px; cursor:pointer;
+  color:var(--text-dim); background:transparent; border:none; font-weight:700; transition:all 0.2s;
+}
+.view-tab.active { background:var(--accent); color:#fff; }
+.node-list {
+  flex:1; overflow-y:auto; padding:8px 10px;
+  display:flex; flex-direction:column; gap:3px;
+}
+.node-list::-webkit-scrollbar { width:4px; }
+.node-list::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+.node-item {
+  display:flex; align-items:center; gap:8px;
+  padding:7px 10px; border-radius:6px; cursor:pointer;
+  transition:all 0.15s; border:1px solid transparent; user-select:none;
+}
+.node-item:hover { background:#eef2fd; border-color:#c5d4f8; }
+.node-item.selected { background:#e8effd; border-color:var(--accent); }
+.node-item.fixed { opacity:0.55; cursor:default; }
+.node-code { font-family:var(--font-mono); font-size:11px; font-weight:700; width:18px; color:var(--accent); flex-shrink:0; }
+.node-name { font-size:11px; color:var(--text); flex:1; line-height:1.3; }
+.node-tag  { font-family:var(--font-mono); font-size:9px; color:var(--confirm); font-weight:700; flex-shrink:0; }
+.panel-actions { padding:12px 14px; display:flex; flex-direction:column; gap:7px; border-top:1px solid var(--border); }
+.btn { width:100%; padding:9px; border:none; border-radius:6px; font-family:var(--font-mono); font-size:11px; font-weight:700; letter-spacing:0.05em; cursor:pointer; transition:all 0.2s; text-transform:uppercase; }
+.btn-primary { background:var(--accent); color:#fff; }
+.btn-primary:hover { background:#1558d0; }
+.btn-primary:disabled { background:var(--border); color:var(--text-dim); cursor:not-allowed; }
+.btn-secondary { background:var(--surface2); color:var(--text-dim); border:1px solid var(--border); }
+.btn-secondary:hover { border-color:var(--accent); color:var(--accent); }
+
+/* ── 중앙 ── */
+.panel-center { flex:1; display:flex; flex-direction:column; overflow:hidden; position:relative; }
+#map-view, #graph-view { flex:1; display:none; overflow:hidden; }
+#map-view.active, #graph-view.active { display:flex; }
+#leaflet-map { width:100%; height:100%; }
+#graph-canvas-wrap { width:100%; height:100%; position:relative; overflow:hidden; background:var(--surface2); }
+#graph-canvas { width:100%; height:100%; }
+.map-hint {
+  position:absolute; bottom:20px; left:50%; transform:translateX(-50%);
+  background:rgba(255,255,255,0.92); border:1px solid var(--border);
+  color:var(--text-dim); font-family:var(--font-mono); font-size:11px;
+  padding:7px 16px; border-radius:20px; pointer-events:none; z-index:1000;
+  white-space:nowrap; box-shadow:var(--shadow);
+}
+
+/* ── 우측 패널 ── */
+.panel-right {
+  width:280px; flex-shrink:0;
+  background:var(--surface); border-left:1px solid var(--border);
+  display:flex; flex-direction:column; overflow:hidden;
+  box-shadow:-2px 0 6px rgba(0,0,0,0.05);
+}
+.step-control { padding:14px 16px; border-bottom:1px solid var(--border); background:var(--surface2); }
+.step-info { font-family:var(--font-mono); font-size:11px; color:var(--text-dim); margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; }
+.step-current { color:var(--accent); font-weight:700; font-size:14px; }
+.step-label-box {
+  background:var(--surface); border:1px solid var(--border); border-radius:5px;
+  padding:6px 10px; font-family:var(--font-mono); font-size:11px; color:var(--text);
+  margin-bottom:8px; min-height:28px; line-height:1.5;
+}
+.step-buttons { display:flex; gap:6px; }
+.step-btn {
+  flex:1; padding:7px; background:var(--surface); border:1px solid var(--border);
+  border-radius:5px; color:var(--text); font-family:var(--font-mono); font-size:11px;
+  cursor:pointer; transition:all 0.15s; font-weight:700;
+}
+.step-btn:hover:not(:disabled) { border-color:var(--accent); color:var(--accent); background:#eef2fd; }
+.step-btn:disabled { opacity:0.3; cursor:not-allowed; }
+.step-btn-auto {
+  width:100%; margin-top:7px; padding:7px;
+  background:var(--surface); border:1px solid var(--border); border-radius:5px;
+  color:var(--text-dim); font-family:var(--font-mono); font-size:11px;
+  cursor:pointer; transition:all 0.15s; font-weight:700;
+}
+.step-btn-auto:hover { border-color:var(--accent); color:var(--accent); }
+.step-btn-auto.running { border-color:var(--accent2); color:var(--accent2); background:#fdf0eb; }
+.progress-bar { height:3px; background:var(--border); margin:8px 0; border-radius:2px; overflow:hidden; }
+.progress-fill { height:100%; background:var(--accent); border-radius:2px; transition:width 0.3s; }
+
+/* 거리 테이블 */
+.dist-table-wrap { flex:1; overflow-y:auto; }
+.dist-table-wrap::-webkit-scrollbar { width:4px; }
+.dist-table-wrap::-webkit-scrollbar-thumb { background:var(--border); }
+.dist-table { width:100%; border-collapse:collapse; font-family:var(--font-mono); font-size:12px; }
+.dist-table th {
+  padding:7px 14px; text-align:left; font-size:9px;
+  text-transform:uppercase; letter-spacing:0.1em; color:var(--text-dim);
+  border-bottom:2px solid var(--border); position:sticky; top:0; background:var(--surface2);
+}
+.dist-table td { padding:6px 14px; border-bottom:1px solid #f0f2f5; transition:background 0.25s; }
+.dist-table tr.row-confirmed td { background:#d4f5e5; }
+.dist-table tr.row-updated td  { background:#fef5dd; }
+.dist-table tr.row-path td     { background:#fde8df; }
+.dist-table tr.row-path .td-dist { color:var(--accent2); font-weight:700; }
+.dist-table .td-code { color:var(--accent); font-weight:700; }
+.dist-table .td-name { color:var(--text); font-size:11px; font-family:var(--font-sans); }
+.dist-table .td-dist { text-align:right; font-weight:700; color:var(--text-dim); }
+.dist-table tr.row-confirmed .td-dist { color:var(--confirm); }
+.dist-table tr.row-updated .td-dist   { color:var(--update); }
+
+/* 결과 박스 */
+.result-box { padding:14px 16px; border-top:2px solid var(--accent2); background:#fff7f4; display:none; }
+.result-box.visible { display:block; }
+.result-title { font-family:var(--font-mono); font-size:10px; text-transform:uppercase; letter-spacing:0.1em; color:var(--accent2); margin-bottom:8px; font-weight:700; }
+.result-path { font-family:var(--font-mono); font-size:11px; color:var(--text); line-height:2; word-break:break-all; }
+.result-path .path-node {
+  display:inline-block; background:#fde8df; border:1px solid #f5bfaa;
+  color:var(--accent2); padding:2px 7px; border-radius:4px; font-size:11px; margin:2px; font-weight:700;
+}
+.result-time { margin-top:8px; font-family:var(--font-mono); font-size:13px; font-weight:700; color:var(--confirm); }
+
+/* 범례 */
+.legend { padding:8px 14px; border-top:1px solid var(--border); display:flex; gap:10px; flex-wrap:wrap; background:var(--surface2); }
+.legend-item { display:flex; align-items:center; gap:4px; font-family:var(--font-mono); font-size:10px; color:var(--text-dim); }
+.legend-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+
+/* 지도 마커 */
+.custom-marker {
+  font-family:var(--font-mono); font-size:11px; font-weight:700;
+  width:30px; height:30px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  border:2.5px solid; cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,0.18);
+}
+.node-label-map {
+  font-family:var(--font-sans); font-size:11px;
+  background:rgba(255,255,255,0.95); color:#1a1d24;
+  border:1px solid #dde1ea; border-radius:4px;
+  padding:2px 6px; white-space:nowrap; pointer-events:none;
+  box-shadow:0 1px 4px rgba(0,0,0,0.12);
+}
+.edge-label {
+  font-family:var(--font-mono); font-size:10px; font-weight:700;
+  padding:2px 5px; border-radius:3px; white-space:nowrap; pointer-events:none;
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-title">
+    <h1>Dijkstra Pathfinder</h1>
+    <span>서울 종로구 최단경로 시뮬레이터</span>
+  </div>
+  <div class="header-badges">
+    <span class="badge badge-start">출발 : 국립서울맹학교 (A)</span>
+    <span class="badge badge-end">도착 : 안국역 (E)</span>
+  </div>
+</header>
+
+<div class="main">
+
+  <!-- 좌측 패널 -->
+  <div class="panel-left">
+    <div class="panel-section">
+      <div class="panel-section-title">시각화 모드</div>
+      <div class="view-tabs">
+        <button class="view-tab active" onclick="switchView('map')">🗺 지도</button>
+        <button class="view-tab" onclick="switchView('graph')">◉ 그래프</button>
+      </div>
+    </div>
+    <div class="panel-section" style="padding-bottom:6px">
+      <div class="panel-section-title">경유지 선택 <span style="color:var(--accent);font-size:9px">(클릭으로 선택)</span></div>
+    </div>
+    <div class="node-list" id="node-list"></div>
+    <div class="panel-actions">
+      <button class="btn btn-primary" id="run-btn" onclick="runDijkstra()">▶ 탐색 시작</button>
+      <button class="btn btn-secondary" onclick="resetAll()">↺ 초기화</button>
+    </div>
+  </div>
+
+  <!-- 중앙 시각화 -->
+  <div class="panel-center">
+    <div id="map-view" class="active">
+      <div id="leaflet-map"></div>
+      <div class="map-hint">마커를 클릭하여 경유지를 선택하세요</div>
+    </div>
+    <div id="graph-view">
+      <div id="graph-canvas-wrap">
+        <canvas id="graph-canvas"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- 우측 패널 -->
+  <div class="panel-right">
+    <div class="step-control">
+      <div class="panel-section-title">탐색 진행</div>
+      <div class="step-info">
+        <span id="step-label-small">준비</span>
+        <span class="step-current" id="step-counter">-</span>
+      </div>
+      <div class="step-label-box" id="step-label">초기 상태 — 탐색 시작 전</div>
+      <div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+      <div class="step-buttons">
+        <button class="step-btn" id="prev-btn" onclick="prevStep()" disabled>◀ 이전</button>
+        <button class="step-btn" id="next-btn" onclick="nextStep()" disabled>다음 ▶</button>
+      </div>
+      <button class="step-btn-auto" id="auto-btn" onclick="toggleAuto()" disabled>⟳ 자동 재생</button>
+    </div>
+
+    <div class="dist-table-wrap">
+      <table class="dist-table">
+        <thead><tr><th>노드</th><th>이름</th><th>최단(분)</th></tr></thead>
+        <tbody id="dist-tbody"></tbody>
+      </table>
+    </div>
+
+    <div class="result-box" id="result-box">
+      <div class="result-title">✦ 최적 경로 발견</div>
+      <div class="result-path" id="result-path"></div>
+      <div class="result-time" id="result-time"></div>
+    </div>
+
+    <div class="legend">
+      <div class="legend-item"><div class="legend-dot" style="background:#fff;border:1.5px solid #9aa5b8"></div>미방문</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#0a9e5c"></div>확정</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#ffd600;border:1.5px solid #d4860a"></div>후보(갱신)</div>
+      <div class="legend-item"><div class="legend-dot" style="background:#e8420a"></div>최단경로</div>
+      <div class="legend-item" style="width:100%;margin-top:4px;padding-top:6px;border-top:1px solid var(--border)">
+        <div style="width:18px;height:3px;background:#1a6ef5;border-radius:1px;flex-shrink:0;margin-right:4px"></div>
+        <span>탐색 중 간선</span>
+      </div>
+      <div class="legend-item">
+        <div style="width:18px;height:3px;background:#0a9e5c;border-radius:1px;flex-shrink:0;margin-right:4px"></div>
+        <span>확정 간선</span>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const NODES = {{ nodes | tojson }};
+const FIXED = new Set(["A","E"]);
+
+let selectedNodes = new Set();
+let simData = null;
+let currentStep = 0;
+let autoTimer = null;
+let currentView = 'map';
+
+// ── Leaflet 지도 (밝은 타일) ──
+const map = L.map('leaflet-map', { center:[37.579,126.978], zoom:15 });
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+  attribution:'© OpenStreetMap © CARTO', subdomains:'abcd', maxZoom:19
+}).addTo(map);
+
+const markerLayer = L.layerGroup().addTo(map);
+const edgeLayer   = L.layerGroup().addTo(map);
+const edgeLblLayer= L.layerGroup().addTo(map);
+const leafletMarkers = {};
+
+function makeIcon(code, bg, border, color) {
+  return L.divIcon({
+    className:'',
+    html:`<div class="custom-marker" style="background:${bg};border-color:${border};color:${color}">${code}</div>`,
+    iconSize:[30,30], iconAnchor:[15,15]
+  });
+}
+function defaultIcon(code) {
+  if (code==='A') return makeIcon(code,'#0a9e5c','#0a9e5c','#fff');
+  if (code==='E') return makeIcon(code,'#e8420a','#e8420a','#fff');
+  if (selectedNodes.has(code)) return makeIcon(code,'#1a6ef5','#1a6ef5','#fff');
+  return makeIcon(code,'#fff','#9aa5b8','#1a1d24');
+}
+
+function initMarkers() {
+  markerLayer.clearLayers();
+  for (const [code, info] of Object.entries(NODES)) {
+    const m = L.marker([info.lat,info.lon], { icon:defaultIcon(code), zIndexOffset:100 })
+      .addTo(markerLayer).on('click', ()=>toggleNode(code));
+    leafletMarkers[code] = m;
+    L.marker([info.lat,info.lon], {
+      icon: L.divIcon({
+        className:'',
+        html:`<div class="node-label-map">${info.name}</div>`,
+        iconSize:null, iconAnchor:[-18,8]
+      }), interactive:false, zIndexOffset:50
+    }).addTo(markerLayer);
+  }
+}
+
+// ── 간선 + 시간 라벨 ──
+function drawEdges(stepIdx) {
+  edgeLayer.clearLayers();
+  edgeLblLayer.clearLayers();
+  if (!simData) return;
+
+  const step    = simData.steps[stepIdx];
+  const visited = new Set(step.visited || []);
+  const phase   = step.phase;
+  const isDone  = phase === 'done';
+  const isTraceback = phase === 'traceback' || phase === 'traceback_start' || isDone;
+
+  // ── 역추적 단계: reveal_edges만 주황으로, 나머지는 초록 트리 + 회색 ──
+  if (isTraceback) {
+    const revealSet = new Set(
+      (step.reveal_edges || []).map(([a,b]) => [a,b].sort().join('-'))
+    );
+    // 최단경로 트리 간선 (초록)
+    const treeEdges = new Set();
+    if (simData.prev) {
+      for (const node of visited) {
+        const p = simData.prev[node];
+        if (p) treeEdges.add([p, node].sort().join('-'));
+      }
+    }
+
+    for (const edge of simData.edges) {
+      const uI = simData.locations[edge.u], vI = simData.locations[edge.v];
+      if (!uI || !vI) continue;
+      const key = [edge.u, edge.v].sort().join('-');
+      const isReveal = revealSet.has(key);
+      const isTree   = treeEdges.has(key);
+
+      // 역추적: reveal=주황, tree=초록(흐리게), 나머지=숨김
+      if (!isReveal && !isTree) continue;
+
+      let lineColor, lineWeight, lineOpacity;
+      if (isReveal) { lineColor='#e8420a'; lineWeight=5;   lineOpacity=0.95; }
+      else          { lineColor='#0a9e5c'; lineWeight=1.5; lineOpacity=0.3; }
+
+      L.polyline([[uI.lat,uI.lon],[vI.lat,vI.lon]], {
+        color:lineColor, weight:lineWeight, opacity:lineOpacity
+      }).addTo(edgeLayer);
+
+      // 라벨은 주황(reveal) 간선에만
+      if (isReveal) {
+        const midLat = (uI.lat + vI.lat) / 2;
+        const midLon = (uI.lon + vI.lon) / 2;
+        L.marker([midLat,midLon], {
+          icon: L.divIcon({
+            className:'',
+            html:`<div class="edge-label" style="background:#e8420a;color:#fff;border:1px solid #e8420a;box-shadow:0 1px 4px rgba(232,66,10,0.4)">${edge.w}분</div>`,
+            iconSize:null, iconAnchor:[16,8]
+          }), interactive:false, zIndexOffset:20
+        }).addTo(edgeLblLayer);
+      }
+    }
+    return;
+  }
+
+  // ── 일반 탐색 단계 ──
+  // 최단경로 트리 간선 (초록)
+  const treeEdges = new Set();
+  if (simData.prev) {
+    for (const node of visited) {
+      const p = simData.prev[node];
+      if (p) treeEdges.add([p, node].sort().join('-'));
+    }
+  }
+
+  // 현재 확정 노드 → 미확정 인접 노드 (파랑)
+  const activeEdges = new Set();
+  if (step.confirmed) {
+    for (const edge of simData.edges) {
+      const other = edge.u === step.confirmed ? edge.v
+                  : edge.v === step.confirmed ? edge.u : null;
+      if (other && !visited.has(other))
+        activeEdges.add([edge.u, edge.v].sort().join('-'));
+    }
+  }
+
+  for (const edge of simData.edges) {
+    const uI = simData.locations[edge.u], vI = simData.locations[edge.v];
+    if (!uI || !vI) continue;
+    const key    = [edge.u, edge.v].sort().join('-');
+    const isActive = activeEdges.has(key);
+    const isTree   = treeEdges.has(key);
+    const uDone  = visited.has(edge.u);
+    const vDone  = visited.has(edge.v);
+
+    // 확정→확정이고 트리에도 없으면 숨김
+    if (!isActive && !isTree && uDone && vDone) continue;
+
+    let lineColor, lineWeight, lineOpacity, lineDash;
+    if      (isActive) { lineColor='#1a6ef5'; lineWeight=3;   lineOpacity=0.9;  lineDash=null; }
+    else if (isTree)   { lineColor='#0a9e5c'; lineWeight=2.5; lineOpacity=0.75; lineDash=null; }
+    else               { lineColor='#b0bec5'; lineWeight=1.5; lineOpacity=0.4;  lineDash='6,4'; }
+
+    L.polyline([[uI.lat,uI.lon],[vI.lat,vI.lon]], {
+      color:lineColor, weight:lineWeight, opacity:lineOpacity, dashArray:lineDash
+    }).addTo(edgeLayer);
+
+    if (!isActive && !isTree) continue; // 회색은 라벨 생략
+
+    const midLat = (uI.lat + vI.lat) / 2;
+    const midLon = (uI.lon + vI.lon) / 2;
+    let lblBg, lblCol, lblBrd, lblShadow;
+    if (isActive) { lblBg='#1a6ef5'; lblCol='#fff';    lblBrd='#1a6ef5'; lblShadow='0 1px 4px rgba(26,110,245,0.35)'; }
+    else          { lblBg='#e8f8ef'; lblCol='#0a7a44'; lblBrd='#0a9e5c'; lblShadow='none'; }
+
+    L.marker([midLat,midLon], {
+      icon: L.divIcon({
+        className:'',
+        html:`<div class="edge-label" style="background:${lblBg};color:${lblCol};border:1px solid ${lblBrd};box-shadow:${lblShadow}">${edge.w}분</div>`,
+        iconSize:null, iconAnchor:[16,8]
+      }), interactive:false, zIndexOffset:20
+    }).addTo(edgeLblLayer);
+  }
+}
+
+// ── 사이드바 ──
+function buildNodeList() {
+  const el = document.getElementById('node-list');
+  el.innerHTML = '';
+  for (const [code, info] of Object.entries(NODES)) {
+    const isFixed = FIXED.has(code);
+    const div = document.createElement('div');
+    div.className = 'node-item'+(isFixed?' fixed':'')+(selectedNodes.has(code)?' selected':'');
+    div.id = `ni-${code}`;
+    div.innerHTML = `<span class="node-code">${code}</span><span class="node-name">${info.name}</span><span class="node-tag">${info.tag||''}</span>`;
+    if (!isFixed) div.onclick = ()=>toggleNode(code);
+    el.appendChild(div);
+  }
+}
+
+function toggleNode(code) {
+  if (FIXED.has(code) || simData) return;
+  selectedNodes.has(code) ? selectedNodes.delete(code) : selectedNodes.add(code);
+  updateNodeVisuals();
+}
+
+function updateNodeVisuals() {
+  for (const code of Object.keys(NODES)) {
+    const el = document.getElementById(`ni-${code}`);
+    if (el && !FIXED.has(code)) el.classList.toggle('selected', selectedNodes.has(code));
+  }
+  for (const [code,m] of Object.entries(leafletMarkers)) m.setIcon(defaultIcon(code));
+  if (currentView==='graph') renderGraph();
+}
+
+// ── 다익스트라 실행 ──
+async function runDijkstra() {
+  const btn = document.getElementById('run-btn');
+  btn.disabled = true; btn.textContent = '탐색 중...';
+  const res = await fetch('/api/run', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ selected:[...selectedNodes] })
+  });
+  simData = await res.json();
+  currentStep = 0;
+  ['prev-btn','next-btn','auto-btn'].forEach(id=>{ document.getElementById(id).disabled=false; });
+  btn.textContent='▶ 재실행'; btn.disabled=false;
+  renderStep(0);
+}
+
+// ── 스텝 렌더링 ──
+function renderStep(idx) {
+  if (!simData) return;
+  const steps  = simData.steps;
+  const step   = steps[idx];
+  const isDone = step.phase === 'done';
+  const isTraceback = step.phase === 'traceback' || step.phase === 'traceback_start';
+
+  document.getElementById('progress-fill').style.width = (steps.length>1 ? idx/(steps.length-1)*100 : 0)+'%';
+  document.getElementById('step-counter').textContent  = `${idx} / ${steps.length-1}`;
+
+  // ── 스텝 라벨 ──
+  if (step.phase==='init') {
+    document.getElementById('step-label').textContent = '초기화 — 출발 노드 A = 0분, 나머지 = ∞';
+    document.getElementById('step-label-small').textContent = '초기화';
+  } else if (step.phase==='traceback_start') {
+    document.getElementById('step-label').textContent = '🔍 탐색 완료! 이제 최단경로를 역추적합니다 (E → A)';
+    document.getElementById('step-label-small').textContent = '역추적 시작';
+  } else if (step.phase==='traceback') {
+    const name = simData.locations[step.confirmed]?.name || '';
+    document.getElementById('step-label').textContent = `↩ 역추적 — [${step.confirmed}] ${name} 에서 왔습니다`;
+    document.getElementById('step-label-small').textContent = `역추적 [${step.confirmed}]`;
+  } else if (step.phase==='done') {
+    document.getElementById('step-label').textContent = `✅ 최단경로 확정!  ${simData.path.join(' → ')}  (${simData.total}분)`;
+    document.getElementById('step-label-small').textContent = '완료';
+  } else {
+    const name = simData.locations[step.confirmed]?.name || '';
+    const upd  = step.updated?.length ? `  →  갱신: ${step.updated.join(', ')}` : '';
+    document.getElementById('step-label').textContent = `노드 [${step.confirmed}] ${name} 확정${upd}`;
+    document.getElementById('step-label-small').textContent = `[${step.confirmed}] 확정`;
+  }
+
+  document.getElementById('prev-btn').disabled = idx===0;
+  document.getElementById('next-btn').disabled = idx===steps.length-1;
+
+  // ── 거리 테이블 ──
+  const tbody    = document.getElementById('dist-tbody');
+  const prevDist = idx>0 ? steps[idx-1].dist : {};
+  tbody.innerHTML = '';
+  const revealNodes = new Set(step.reveal_nodes || []);
+  for (const code of [...new Set(simData.active)].sort()) {
+    const info = simData.locations[code]; if (!info) continue;
+    const d=step.dist[code], p=prevDist[code];
+    let rc='';
+    if (isTraceback || isDone) {
+      // 역추적 단계: 경로 노드는 주황 하이라이트
+      if (revealNodes.has(code)) rc='row-path';
+    } else {
+      if (step.confirmed===code) rc='row-confirmed';
+      else if (d!==null && d!==undefined && (p===null||p===undefined||d<p)) rc='row-updated';
+    }
+    tbody.innerHTML += `<tr class="${rc}"><td class="td-code">${code}</td><td class="td-name">${info.name}</td><td class="td-dist">${d===null||d===undefined?'∞':d+'분'}</td></tr>`;
+  }
+
+  // ── 결과 박스: done 단계에서만 표시 ──
+  const rb = document.getElementById('result-box');
+  if (isDone && simData.path?.length>0) {
+    rb.classList.add('visible');
+    document.getElementById('result-path').innerHTML =
+      simData.path.map(c=>`<span class="path-node">${c}</span>`).join(' → ');
+    document.getElementById('result-time').textContent = `총 소요시간 : ${simData.total}분`;
+  } else { rb.classList.remove('visible'); }
+
+  drawEdges(idx);
+  renderMapMarkers(idx);
+  if (currentView==='graph') renderGraph(idx);
+}
+
+// ── 지도 마커 색상 ──
+function renderMapMarkers(idx) {
+  if (!simData) return;
+  const step    = simData.steps[idx];
+  const vis     = new Set(step.visited||[]);
+  const phase   = step.phase;
+  const isDone  = phase === 'done';
+  const isTraceback = phase === 'traceback' || phase === 'traceback_start' || isDone;
+  const updated = new Set(step.updated||[]);
+  const revealNodes = new Set(step.reveal_nodes||[]);
+
+  for (const [code,marker] of Object.entries(leafletMarkers)) {
+    if (!simData.active.includes(code)) {
+      marker.setIcon(makeIcon(code,'#f0f2f5','#dde1ea','#bbc0cc'));
+      continue;
+    }
+    let bg, border, color, pulse=false;
+
+    if (isTraceback) {
+      // 역추적 단계: 경로 노드=주황, 확정=연한초록, 나머지=흐리게
+      if (revealNodes.has(code)) {
+        bg='#e8420a'; border='#e8420a'; color='#fff';
+      } else if (vis.has(code)) {
+        bg='#c8eedd'; border='#0a9e5c'; color='#4a7a60';
+      } else if (code==='E') {
+        bg='#fde8df'; border='#e8420a'; color='#c43a08';
+      } else {
+        bg='#f5f5f5'; border='#d0d5df'; color='#aab0bc';
+      }
+    } else {
+      // 일반 탐색 단계
+      if (code===step.confirmed) {
+        bg='#d4f5e5'; border='#0a9e5c'; color='#0a7a44';
+      } else if (vis.has(code)) {
+        bg='#0a9e5c'; border='#0a9e5c'; color='#fff';
+      } else if (updated.has(code)) {
+        bg='#ffd600'; border='#d4860a'; color='#5a3a00'; pulse=true;
+      } else if (code==='E') {
+        bg='#fde8df'; border='#e8420a'; color='#c43a08';
+      } else {
+        bg='#fff'; border='#9aa5b8'; color='#1a1d24';
+      }
+    }
+
+    if (pulse) {
+      marker.setIcon(L.divIcon({
+        className:'',
+        html:`<div class="custom-marker" style="background:${bg};border-color:${border};color:${color};width:34px;height:34px;font-size:12px;box-shadow:0 0 0 4px rgba(212,134,10,0.25)">${code}</div>`,
+        iconSize:[34,34], iconAnchor:[17,17]
+      }));
+    } else {
+      marker.setIcon(makeIcon(code,bg,border,color));
+    }
+  }
+}
+
+// ── 그래프 캔버스 ──
+const canvas = document.getElementById('graph-canvas');
+const ctx    = canvas.getContext('2d');
+
+function resizeCanvas() {
+  const w = document.getElementById('graph-canvas-wrap');
+  canvas.width=w.clientWidth; canvas.height=w.clientHeight;
+  if (currentView==='graph') renderGraph(currentStep);
+}
+
+function scalePos(gx,gy) {
+  const padX=90,padY=70,srcW=460,srcH=430;
+  const sc  = Math.min((canvas.width-padX*2)/srcW,(canvas.height-padY*2)/srcH);
+  const offX= (canvas.width -srcW*sc)/2;
+  const offY= (canvas.height-srcH*sc)/2;
+  return [(gx-100)*sc+offX,(gy-50)*sc+offY];
+}
+
+function rrect(ctx,x,y,w,h,r) {
+  ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.lineTo(x+w-r,y); ctx.quadraticCurveTo(x+w,y,x+w,y+r);
+  ctx.lineTo(x+w,y+h-r); ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);
+  ctx.lineTo(x+r,y+h); ctx.quadraticCurveTo(x,y+h,x,y+h-r);
+  ctx.lineTo(x,y+r); ctx.quadraticCurveTo(x,y,x+r,y); ctx.closePath();
+}
+
+function renderGraph(stepIdx) {
+  if (!canvas.width) resizeCanvas();
+  stepIdx = stepIdx!==undefined ? stepIdx : currentStep;
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // 배경 + 격자
+  ctx.fillStyle='#f7f8fa'; ctx.fillRect(0,0,canvas.width,canvas.height);
+  ctx.strokeStyle='rgba(200,206,218,0.5)'; ctx.lineWidth=1;
+  for (let x=0;x<canvas.width;x+=40){ ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,canvas.height);ctx.stroke(); }
+  for (let y=0;y<canvas.height;y+=40){ ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(canvas.width,y);ctx.stroke(); }
+
+  const activeSet  = simData ? new Set(simData.active) : new Set([...selectedNodes,'A','E']);
+  const step       = simData ? simData.steps[stepIdx] : null;
+  const vis        = new Set(step?.visited||[]);
+  const isLast     = simData && stepIdx===simData.steps.length-1;
+  const finalEdges = new Set();
+  if (isLast && simData?.path)
+    for (let i=0;i<simData.path.length-1;i++)
+      finalEdges.add([simData.path[i],simData.path[i+1]].sort().join('-'));
+
+  const edges = simData ? simData.edges : [];
+
+  // 간선
+  for (const edge of edges) {
+    const uI=NODES[edge.u], vI=NODES[edge.v]; if(!uI||!vI) continue;
+    const [x1,y1]=scalePos(uI.gx,uI.gy), [x2,y2]=scalePos(vI.gx,vI.gy);
+    const key=([edge.u,edge.v].sort().join('-'));
+    const isFinal=finalEdges.has(key);
+
+    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2);
+    ctx.strokeStyle = isFinal ? '#e8420a' : 'rgba(140,155,185,0.7)';
+    ctx.lineWidth   = isFinal ? 3.5 : 1.5;
+    ctx.setLineDash(isFinal ? [] : [5,4]);
+    ctx.stroke(); ctx.setLineDash([]);
+
+    // 가중치 라벨 항상 표시
+    const mx=(x1+x2)/2, my=(y1+y2)/2;
+    const label=`${edge.w}분`;
+    ctx.font=`bold 10px JetBrains Mono,monospace`;
+    const tw=ctx.measureText(label).width, pad=4;
+    rrect(ctx, mx-tw/2-pad, my-7, tw+pad*2, 14, 3);
+    ctx.fillStyle   = isFinal ? '#e8420a' : '#ffffff';
+    ctx.strokeStyle = isFinal ? '#e8420a' : '#b0bcce';
+    ctx.lineWidth=1; ctx.fill(); ctx.stroke();
+    ctx.fillStyle    = isFinal ? '#ffffff' : '#445570';
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(label, mx, my);
+  }
+
+  // 노드
+  canvas._nodePositions={};
+  for (const [code,info] of Object.entries(NODES)) {
+    if (simData && !activeSet.has(code)) continue;
+    const [x,y]=scalePos(info.gx,info.gy);
+    canvas._nodePositions[code]=[x,y];
+    const r=20;
+    let fill,stroke,tcol;
+    if (!simData) {
+      if (code==='A')              { fill='#0a9e5c';stroke='#0a9e5c';tcol='#fff'; }
+      else if (code==='E')         { fill='#e8420a';stroke='#e8420a';tcol='#fff'; }
+      else if (selectedNodes.has(code)){ fill='#1a6ef5';stroke='#1a6ef5';tcol='#fff'; }
+      else                         { fill='#fff';stroke='#9aa5b8';tcol='#1a1d24'; }
+    } else if (isLast && simData.path?.includes(code)) { fill='#e8420a';stroke='#e8420a';tcol='#fff'; }
+    else if (code===step?.confirmed){ fill='#d4f5e5';stroke='#0a9e5c';tcol='#0a7a44'; }
+    else if (vis.has(code))         { fill='#0a9e5c';stroke='#0a9e5c';tcol='#fff'; }
+    else if (step?.updated?.includes(code)){ fill='#fef5dd';stroke='#d4860a';tcol='#a86200'; }
+    else                            { fill='#fff';stroke='#9aa5b8';tcol='#1a1d24'; }
+
+    ctx.shadowColor='rgba(0,0,0,0.12)'; ctx.shadowBlur=8;
+    ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2);
+    ctx.fillStyle=fill; ctx.fill();
+    ctx.strokeStyle=stroke; ctx.lineWidth=2.5; ctx.stroke();
+    ctx.shadowBlur=0;
+
+    ctx.font=`bold 13px JetBrains Mono,monospace`;
+    ctx.fillStyle=tcol; ctx.textAlign='center'; ctx.textBaseline='middle';
+    ctx.fillText(code,x,y);
+
+    ctx.font=`11px Noto Sans KR,sans-serif`;
+    ctx.fillStyle='#556070';
+    ctx.fillText(info.name,x,y+r+13);
+
+    // 현재 최단거리 배지
+    if (step && step.dist[code]!==null && step.dist[code]!==undefined) {
+      const dl=`${step.dist[code]}분`;
+      ctx.font=`bold 9px JetBrains Mono,monospace`;
+      const tw2=ctx.measureText(dl).width;
+      const lx=x-tw2/2-3, ly=y-r-17;
+      rrect(ctx,lx,ly,tw2+6,14,3);
+      ctx.fillStyle   = vis.has(code) ? '#d4f5e5' : '#fef5dd';
+      ctx.strokeStyle = vis.has(code) ? '#0a9e5c' : '#d4860a';
+      ctx.lineWidth=1; ctx.fill(); ctx.stroke();
+      ctx.fillStyle = vis.has(code) ? '#0a7a44' : '#a86200';
+      ctx.textAlign='center'; ctx.fillText(dl,x,ly+7);
+    }
+  }
+}
+
+canvas.addEventListener('click', (e)=>{
+  if (simData) return;
+  const rect=canvas.getBoundingClientRect();
+  const mx=e.clientX-rect.left, my=e.clientY-rect.top;
+  for (const [code,[x,y]] of Object.entries(canvas._nodePositions||{})) {
+    if (Math.hypot(mx-x,my-y)<22) { toggleNode(code); renderGraph(); break; }
+  }
+});
+
+// ── 뷰 전환 ──
+function switchView(view) {
+  currentView=view;
+  document.querySelectorAll('.view-tab').forEach((t,i)=>
+    t.classList.toggle('active',(i===0&&view==='map')||(i===1&&view==='graph')));
+  document.getElementById('map-view').classList.toggle('active',view==='map');
+  document.getElementById('graph-view').classList.toggle('active',view==='graph');
+  if (view==='graph') { setTimeout(()=>{ resizeCanvas(); renderGraph(currentStep); },50); }
+  else { setTimeout(()=>map.invalidateSize(),50); if(simData) drawEdges(currentStep); }
+}
+
+// ── 스텝 컨트롤 ──
+function nextStep(){ if(!simData||currentStep>=simData.steps.length-1)return; currentStep++; renderStep(currentStep); }
+function prevStep(){ if(!simData||currentStep<=0)return; currentStep--; renderStep(currentStep); }
+function toggleAuto(){
+  const btn=document.getElementById('auto-btn');
+  if (autoTimer){ clearInterval(autoTimer);autoTimer=null;btn.textContent='⟳ 자동 재생';btn.classList.remove('running'); }
+  else {
+    btn.textContent='⏹ 정지'; btn.classList.add('running');
+    autoTimer=setInterval(()=>{
+      if(currentStep>=simData.steps.length-1){
+        clearInterval(autoTimer);autoTimer=null;btn.textContent='⟳ 자동 재생';btn.classList.remove('running');
+      } else { currentStep++; renderStep(currentStep); }
+    },900);
+  }
+}
+
+// ── 초기화 ──
+function resetAll(){
+  if(autoTimer){clearInterval(autoTimer);autoTimer=null;}
+  simData=null; currentStep=0; selectedNodes.clear();
+  ['prev-btn','next-btn','auto-btn'].forEach(id=>{ document.getElementById(id).disabled=true; });
+  const ab=document.getElementById('auto-btn'); ab.textContent='⟳ 자동 재생'; ab.classList.remove('running');
+  document.getElementById('result-box').classList.remove('visible');
+  document.getElementById('dist-tbody').innerHTML='';
+  document.getElementById('step-label').textContent='초기 상태 — 탐색 시작 전';
+  document.getElementById('step-label-small').textContent='준비';
+  document.getElementById('step-counter').textContent='-';
+  document.getElementById('progress-fill').style.width='0%';
+  document.getElementById('run-btn').textContent='▶ 탐색 시작';
+  document.getElementById('run-btn').disabled=false;
+  edgeLayer.clearLayers(); edgeLblLayer.clearLayers();
+  updateNodeVisuals(); buildNodeList();
+  if(currentView==='graph') renderGraph();
+}
+
+window.addEventListener('resize',resizeCanvas);
+initMarkers(); buildNodeList(); renderGraph();
+</script>
+</body>
+</html>
